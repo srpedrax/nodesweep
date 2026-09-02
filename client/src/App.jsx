@@ -25,6 +25,8 @@ function projectAge(dateValue) {
 function App() {
   const [rootPath, setRootPath] = useState(() => localStorage.getItem(STORAGE_KEY) || '');
   const [projects, setProjects] = useState([]);
+  const [gradleScan, setGradleScan] = useState({ items: [], projects: [], totalSizeBytes: 0, recoverableSizeBytes: 0, gradleHome: null });
+  const [ecosystem, setEcosystem] = useState('node');
   const [selected, setSelected] = useState(new Set());
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
@@ -32,10 +34,13 @@ function App() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [freedBytes, setFreedBytes] = useState(null);
 
-  const totalBytes = useMemo(() => projects.reduce((sum, item) => sum + item.sizeBytes, 0), [projects]);
-  const selectedProjects = useMemo(() => projects.filter((item) => selected.has(item.nodeModulesPath)), [projects, selected]);
-  const selectedBytes = selectedProjects.reduce((sum, item) => sum + item.sizeBytes, 0);
-  const allSelected = projects.length > 0 && selected.size === projects.length;
+  const visibleItems = ecosystem === 'node' ? projects : gradleScan.items;
+  const totalBytes = ecosystem === 'node' ? projects.reduce((sum, item) => sum + item.sizeBytes, 0) : gradleScan.recoverableSizeBytes;
+  const selectedProjects = useMemo(() => projects.filter((item) => selected.has(item.id)), [projects, selected]);
+  const selectedGradle = gradleScan.items.filter((item) => selected.has(item.id));
+  const selectedBytes = (ecosystem === 'node' ? selectedProjects : selectedGradle).reduce((sum, item) => sum + item.sizeBytes, 0);
+  const selectableItems = ecosystem === 'node' ? projects : gradleScan.items.filter((item) => item.deletable);
+  const allSelected = selectableItems.length > 0 && selectableItems.every((item) => selected.has(item.id));
 
   async function chooseFolder() {
     setError('');
@@ -51,9 +56,9 @@ function App() {
     if (!value) return setError('Informe a pasta onde ficam seus projetos.');
     setStatus('scanning'); setError(''); setFreedBytes(null); setHasScanned(true);
     try {
-      const data = await invoke('scan_projects', { rootPath: value });
+      const [data, gradleData] = await Promise.all([invoke('scan_projects', { rootPath: value }), invoke('scan_gradle', { rootPath: value })]);
       localStorage.setItem(STORAGE_KEY, value);
-      setProjects(data.projects); setSelected(new Set());
+      setProjects(data.projects); setGradleScan(gradleData); setSelected(new Set());
     } catch (requestError) {
       setProjects([]); setSelected(new Set()); setError(requestError.message);
     } finally { setStatus('idle'); }
@@ -68,14 +73,22 @@ function App() {
   }
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(projects.map((item) => item.nodeModulesPath)));
+    setSelected(allSelected ? new Set() : new Set(selectableItems.map((item) => item.id)));
+  }
+
+  function applyPreset(preset) {
+    const categories = preset === 'conservative' ? ['BuildOutput', 'ProjectCache', 'Daemon'] : preset === 'balanced' ? ['BuildOutput', 'ProjectCache', 'Daemon', 'WrapperDistribution'] : ['BuildOutput', 'ProjectCache', 'Daemon', 'WrapperDistribution', 'GlobalCache'];
+    setSelected(new Set(gradleScan.items.filter((item) => item.deletable && categories.includes(item.category)).map((item) => item.id)));
   }
 
   async function cleanup() {
     setStatus('cleaning'); setError('');
     try {
-      const data = await invoke('cleanup_projects', { paths: selectedProjects.map((item) => item.nodeModulesPath), confirmed: true });
-      setProjects((current) => current.filter((item) => !selected.has(item.nodeModulesPath)));
+      const data = ecosystem === 'node'
+        ? await invoke('cleanup_projects', { ids: selectedProjects.map((item) => item.id), confirmed: true })
+        : await invoke('cleanup_gradle', { ids: selectedGradle.map((item) => item.id), confirmed: true });
+      if (ecosystem === 'node') setProjects((current) => current.filter((item) => !selected.has(item.id)));
+      else setGradleScan((current) => ({ ...current, items: current.items.filter((item) => !selected.has(item.id)), recoverableSizeBytes: Math.max(0, current.recoverableSizeBytes - data.totalFreedBytes) }));
       setSelected(new Set()); setFreedBytes(data.totalFreedBytes); setConfirmOpen(false);
     } catch (requestError) {
       setError(requestError.message); setConfirmOpen(false);
@@ -86,7 +99,7 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="NodeSweep início"><span className="brand-mark">N</span>Node<span>Sweep</span></a>
-        <span className="version">v2 alpha</span>
+        <span className="version">v2.1 alpha</span>
       </header>
 
       <main id="top">
@@ -110,25 +123,34 @@ function App() {
 
         {hasScanned && status !== 'scanning' && (
           <section className="results">
+            <div className="ecosystem-tabs"><button className={ecosystem === 'node' ? 'active' : ''} onClick={() => { setEcosystem('node'); setSelected(new Set()); }}>Node.js <span>{formatBytes(projects.reduce((s,p)=>s+p.sizeBytes,0))}</span></button><button className={ecosystem === 'gradle' ? 'active' : ''} onClick={() => { setEcosystem('gradle'); setSelected(new Set()); }}>Gradle <span>{formatBytes(gradleScan.recoverableSizeBytes)}</span></button></div>
             <div className="results-head">
-              <div><p className="section-label">Resultado da varredura</p><h2>{projects.length} {projects.length === 1 ? 'projeto encontrado' : 'projetos encontrados'}</h2></div>
+              <div><p className="section-label">{ecosystem === 'node' ? 'Projetos Node.js' : 'Gradle storage management'}</p><h2>{visibleItems.length} {visibleItems.length === 1 ? 'item encontrado' : 'itens encontrados'}</h2></div>
               <div className="recoverable"><strong>{formatBytes(totalBytes)}</strong><span>recuperáveis</span></div>
             </div>
 
-            {projects.length > 0 ? <>
+            {visibleItems.length > 0 ? <>
+              {ecosystem === 'gradle' && <div className="presets"><span>Estratégia</span><button onClick={()=>applyPreset('conservative')}>Conservative</button><button onClick={()=>applyPreset('balanced')}>Balanced</button><button onClick={()=>applyPreset('deep')}>Deep clean</button></div>}
               <button className="select-all" onClick={toggleAll}><span className={`checkbox ${allSelected ? 'checked' : ''}`}>{allSelected ? '✓' : ''}</span> Selecionar todos</button>
               <div className="project-list">
-                {projects.map((project) => {
+                {ecosystem === 'node' ? projects.map((project) => {
                   const age = projectAge(project.lastModified);
-                  const checked = selected.has(project.nodeModulesPath);
-                  return <button key={project.nodeModulesPath} className={`project-card ${checked ? 'selected' : ''}`} onClick={() => toggle(project.nodeModulesPath)}>
+                  const checked = selected.has(project.id);
+                  return <button key={project.id} className={`project-card ${checked ? 'selected' : ''}`} onClick={() => toggle(project.id)}>
                     <span className={`checkbox ${checked ? 'checked' : ''}`}>{checked ? '✓' : ''}</span>
                     <span className="project-main"><strong>{project.name}</strong><small title={project.path}>{project.path}</small><span className="meta">{age.text} <i className={`age ${age.tone}`}>{age.badge}</i></span></span>
                     <strong className="size">{formatBytes(project.sizeBytes)}</strong>
                   </button>;
+                }) : gradleScan.items.map((item) => {
+                  const checked = selected.has(item.id); const age = projectAge(item.lastModified);
+                  return <button key={item.id} disabled={!item.deletable} className={`project-card ${checked ? 'selected' : ''} ${!item.deletable ? 'protected' : ''}`} onClick={() => toggle(item.id)}>
+                    <span className={`checkbox ${checked ? 'checked' : ''}`}>{checked ? '✓' : item.deletable ? '' : '•'}</span>
+                    <span className="project-main"><strong>{item.name}</strong><small title={item.path}>{item.path}</small><span className="meta">{item.description} {item.usedBy?.length > 0 && ` Used by: ${item.usedBy.join(', ')}`}</span></span>
+                    <span className="gradle-side"><strong className="size">{formatBytes(item.sizeBytes)}</strong><i className={`risk ${item.riskLevel.toLowerCase()}`}>{item.riskLevel}</i><small>{age.text}</small></span>
+                  </button>;
                 })}
               </div>
-              <div className="action-bar"><p><span>Selecionados</span><strong>{selected.size} {selected.size === 1 ? 'projeto' : 'projetos'} · {formatBytes(selectedBytes)}</strong></p><button className="danger" disabled={!selected.size} onClick={() => setConfirmOpen(true)}>Limpar selecionados <span>⌫</span></button></div>
+              <div className="action-bar"><p><span>Selecionados</span><strong>{selected.size} {selected.size === 1 ? 'item' : 'itens'} · {formatBytes(selectedBytes)}</strong></p><button className="danger" disabled={!selected.size} onClick={() => setConfirmOpen(true)}>Revisar limpeza <span>⌫</span></button></div>
             </> : <div className="empty"><span>✓</span><h3>Nada para limpar por aqui</h3><p>Nenhum projeto com <code>node_modules</code> foi encontrado nessa pasta.</p></div>}
           </section>
         )}
@@ -139,8 +161,8 @@ function App() {
       {confirmOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && setConfirmOpen(false)}>
         <div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
           <div className="modal-icon">!</div><p className="section-label">Confirmação necessária</p><h2 id="confirm-title">Remover dependências selecionadas?</h2>
-          <p>Você removerá <strong>{selected.size} {selected.size === 1 ? 'pasta' : 'pastas'} node_modules</strong> e recuperará aproximadamente <strong>{formatBytes(selectedBytes)}</strong>.</p>
-          <div className="modal-note">O código-fonte e os arquivos do projeto não serão alterados.</div>
+          <p>Você removerá <strong>{selected.size} {selected.size === 1 ? 'item reconstruível' : 'itens reconstruíveis'}</strong> e recuperará aproximadamente <strong>{formatBytes(selectedBytes)}</strong>.</p>
+          <div className="modal-note">O código-fonte e as configurações protegidas não serão alterados. Builds podem ser recompilados e dependências baixadas novamente.</div>
           <div className="modal-actions"><button className="secondary" onClick={() => setConfirmOpen(false)} disabled={status === 'cleaning'}>Cancelar</button><button className="danger" onClick={cleanup} disabled={status === 'cleaning'}>{status === 'cleaning' ? <><i className="spinner" /> Limpando</> : 'Sim, limpar agora'}</button></div>
         </div>
       </div>}

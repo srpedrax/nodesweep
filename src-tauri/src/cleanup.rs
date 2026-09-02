@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::{
     collections::HashSet,
     fs,
-    path::{Component, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 #[derive(Debug, Serialize)]
@@ -24,7 +24,7 @@ struct SafeTarget {
     canonical: PathBuf,
 }
 
-fn is_protected_system_path(path: &PathBuf) -> bool {
+fn is_protected_system_path(path: &Path) -> bool {
     #[cfg(windows)]
     let protected: Vec<PathBuf> = ["WINDIR", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"]
         .iter()

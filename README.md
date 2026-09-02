@@ -4,7 +4,7 @@
 
 ![Dashboard do NodeSweep](docs/assets/dashboard.png)
 
-O NodeSweep é um aplicativo desktop que encontra projetos abaixo de uma pasta escolhida, mede seus diretórios `node_modules` e permite remover somente os itens selecionados. A linha 2.0 migra o protótipo web para Tauri 2: sem servidor local e sem exigir Node.js na máquina do usuário final.
+O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Node.js e Gradle, explica o que pode ser reconstruído e só remove itens revisados pelo usuário. A linha 2.x usa Tauri 2: sem servidor local e sem exigir Node.js na máquina do usuário final.
 
 ## Funcionalidades
 
@@ -16,6 +16,12 @@ O NodeSweep é um aplicativo desktop que encontra projetos abaixo de uma pasta e
 - confirmação explícita antes da limpeza;
 - cálculo do espaço efetivamente recuperado;
 - último caminho salvo localmente no WebView do aplicativo.
+- caches globais e locais do Gradle separados por categoria;
+- detecção de projetos Groovy DSL, Kotlin DSL e Wrapper;
+- distribuições relacionadas aos projetos conhecidos;
+- JDKs provisionados exibidos como protegidos;
+- estratégias Conservative, Balanced e Deep Clean;
+- limpeza Gradle exclusivamente por IDs emitidos pelo scanner.
 
 ## Requisitos
 
@@ -47,7 +53,7 @@ npm.cmd --prefix client audit --omit=dev
 
 ## Segurança
 
-O NodeSweep remove exclusivamente diretórios chamados `node_modules` quando todas as condições abaixo são satisfeitas:
+O NodeSweep remove exclusivamente categorias reconstruíveis reconhecidas quando todas as condições abaixo são satisfeitas:
 
 - o diretório existe e é real;
 - o pai contém um arquivo `package.json` regular;
@@ -56,12 +62,14 @@ O NodeSweep remove exclusivamente diretórios chamados `node_modules` quando tod
 - todo o lote foi validado;
 - o usuário enviou confirmação explícita;
 - o alvo permaneceu igual na revalidação imediatamente anterior à exclusão.
+- itens Gradle são resolvidos por IDs de um snapshot nativo, nunca por caminhos enviados pela interface.
 
 O código-fonte, `.env`, uploads, bancos, arquivos públicos, manifests e lockfiles nunca são alvos válidos. Ainda assim, mantenha backups e revise a seleção antes de confirmar. Consulte a [política de segurança](SECURITY.md) para reportar vulnerabilidades.
 
 ## Arquitetura
 
-O React chama `scan_projects` e `cleanup_projects` por IPC. Os comandos executam o trabalho de filesystem em threads bloqueantes gerenciadas pelo runtime Tauri. Não há Express, porta HTTP ou acesso genérico do frontend ao filesystem.
+O React chama os scanners e cleaners por IPC usando IDs opacos de snapshots. Os comandos executam o trabalho de filesystem em threads bloqueantes gerenciadas pelo runtime Tauri. Não há Express, porta HTTP ou acesso genérico do frontend ao filesystem.
+O módulo Gradle usa comandos separados (`scan_gradle` e `cleanup_gradle`) e mantém seu registro de alvos apenas em memória.
 
 ## Estrutura
 
@@ -78,6 +86,8 @@ src-tauri/
 - [x] scanner e limpeza segura de `node_modules`;
 - [x] dashboard React responsivo;
 - [x] aplicativo Tauri com seletor nativo;
+- [x] gerenciamento Gradle global e por projeto;
+- [x] presets, risk labels e limpeza por snapshot;
 - [ ] cancelamento e progresso da varredura;
 - [ ] caches e artefatos adicionais por política explícita;
 - [ ] pacotes instaláveis e atualizações automáticas.

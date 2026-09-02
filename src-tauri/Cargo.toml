@@ -1,6 +1,6 @@
 [package]
 name = "nodesweep"
-version = "2.0.0-alpha.1"
+version = "2.1.0-alpha.1"
 description = "Safely recover space from Node.js projects"
 authors = ["srpedrax"]
 edition = "2021"

@@ -32,5 +32,7 @@ Evite executar provas de conceito contra dados reais. Use apenas diretórios tem
 - o alvo é revalidado imediatamente antes da exclusão;
 - a interface acessa somente comandos nativos registrados; não existe servidor HTTP local;
 - diretórios protegidos do sistema operacional são recusados.
+- a interface envia IDs de snapshots, nunca caminhos de exclusão;
+- categorias Gradle usam uma whitelist explícita e JDKs/configurações não são registradas como alvos.
 
 Nenhuma validação elimina completamente condições de corrida do sistema de arquivos. Faça backup dos projetos importantes e revise a seleção apresentada na confirmação.

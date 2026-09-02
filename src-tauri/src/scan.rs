@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::{
     fs,
+    hash::{DefaultHasher, Hash, Hasher},
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
 };
@@ -8,11 +9,14 @@ use std::{
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
+    pub id: String,
     pub name: String,
     pub path: String,
     pub node_modules_path: String,
     pub size_bytes: u64,
     pub last_modified: u64,
+    pub risk_level: String,
+    pub deletable: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -107,6 +111,15 @@ pub fn scan(root_path: &str) -> Result<ScanResult, String> {
             if let Some(modules) = modules {
                 let modules_path = modules.path();
                 projects.push(Project {
+                    id: {
+                        let mut hasher = DefaultHasher::new();
+                        fs::canonicalize(&modules_path)
+                            .unwrap_or_else(|_| modules_path.clone())
+                            .to_string_lossy()
+                            .to_lowercase()
+                            .hash(&mut hasher);
+                        format!("node-{:016x}", hasher.finish())
+                    },
                     name: current
                         .file_name()
                         .unwrap_or_default()
@@ -116,6 +129,8 @@ pub fn scan(root_path: &str) -> Result<ScanResult, String> {
                     node_modules_path: modules_path.to_string_lossy().into_owned(),
                     size_bytes: directory_size(&modules_path)?,
                     last_modified: modified_millis(&modules_path),
+                    risk_level: "SAFE".into(),
+                    deletable: true,
                 });
             }
         }
