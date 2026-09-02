@@ -6,6 +6,16 @@
 
 > Recupere espaço de projetos Node.js esquecidos sem colocar seu código-fonte em risco.
 
+<p align="center">
+  <a href="https://github.com/srpedrax/nodesweep/releases/download/v2.1.0-alpha.1/NodeSweep_2.1.0-alpha.1_x64-setup.exe">
+    <img alt="Baixar NodeSweep para Windows" src="https://img.shields.io/badge/Baixar_para_Windows-v2.1_alpha-70dfa0?style=for-the-badge&logo=windows11&logoColor=07100c">
+  </a>
+</p>
+
+<p align="center">
+  Instalador x64 para Windows 10 e 11 · <a href="https://github.com/srpedrax/nodesweep/releases">ver todas as versões</a>
+</p>
+
 ![Dashboard do NodeSweep](docs/assets/dashboard.png)
 
 O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Node.js e Gradle, explica o que pode ser reconstruído e só remove itens revisados pelo usuário. A linha 2.x usa Tauri 2: sem servidor local e sem exigir Node.js na máquina do usuário final.
@@ -39,7 +49,9 @@ O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Nod
 
 ## Instalação
 
-Baixe o instalador `.exe` da release mais recente, execute-o e abra o NodeSweep pelo menu Iniciar. Nenhum runtime separado é necessário.
+Baixe diretamente o [instalador do NodeSweep v2.1 alpha para Windows](https://github.com/srpedrax/nodesweep/releases/download/v2.1.0-alpha.1/NodeSweep_2.1.0-alpha.1_x64-setup.exe), execute-o e abra o aplicativo pelo menu Iniciar. Nenhum runtime separado é necessário.
+
+Esta é uma versão de pré-lançamento. As demais versões e respectivas notas ficam disponíveis na [página de releases](https://github.com/srpedrax/nodesweep/releases).
 
 Ao abrir, o aplicativo descobre o armazenamento e analisa as categorias do sistema reconhecidas. Para Node.js e Gradle, use **Adicionar local de desenvolvimento** como opção avançada.
 
