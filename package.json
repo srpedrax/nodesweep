@@ -6,6 +6,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "build:web": "npm --prefix client run build",
+    "branding": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-icons.ps1",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "engines": {

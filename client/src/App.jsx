@@ -98,7 +98,7 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="NodeSweep início"><span className="brand-mark">N</span>Node<span>Sweep</span></a>
+        <a className="brand" href="#top" aria-label="NodeSweep início"><img className="app-logo" src="/nodesweep-icon.png" alt="" />Node<span>Sweep</span></a>
         <span className="version">v2.1 alpha</span>
       </header>
 

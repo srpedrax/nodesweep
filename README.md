@@ -1,4 +1,8 @@
-# NodeSweep
+<p align="center">
+  <img src="./assets/branding/nodesweep-icon.png" width="120" alt="NodeSweep">
+</p>
+
+<h1 align="center">NodeSweep</h1>
 
 > Recupere espaço de projetos Node.js esquecidos sem colocar seu código-fonte em risco.
 
@@ -50,6 +54,16 @@ npm.cmd run build
 npm.cmd audit --omit=dev
 npm.cmd --prefix client audit --omit=dev
 ```
+
+### Identidade visual
+
+O arquivo canônico é `assets/branding/nodesweep-icon.png`. Depois de alterá-lo, regenere os ícones do Tauri, instalador e frontend com:
+
+```powershell
+npm.cmd run branding
+```
+
+Não edite manualmente os derivados em `src-tauri/icons` ou `client/public`.
 
 ## Segurança
 
