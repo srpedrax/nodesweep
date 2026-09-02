@@ -1,13 +1,22 @@
-# NodeSweep
+<p align="center">
+  <img src="./assets/branding/nodesweep-icon.png" width="120" alt="NodeSweep">
+</p>
+
+<h1 align="center">NodeSweep</h1>
 
 > Recupere espaço de projetos Node.js esquecidos sem colocar seu código-fonte em risco.
 
 ![Dashboard do NodeSweep](docs/assets/dashboard.png)
 
-O NodeSweep encontra projetos abaixo de uma pasta escolhida, mede seus diretórios `node_modules` e permite remover somente os itens selecionados. O foco do v0.1 é deliberadamente estreito: fazer uma única limpeza com uma camada de segurança forte e comportamento previsível.
+O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Node.js e Gradle, explica o que pode ser reconstruído e só remove itens revisados pelo usuário. A linha 2.x usa Tauri 2: sem servidor local e sem exigir Node.js na máquina do usuário final.
 
 ## Funcionalidades
 
+- descoberta automática das unidades pelo Windows, com identidade de volume e capacidade;
+- unidade do sistema selecionada automaticamente; removíveis e rede ficam fora da seleção automática;
+- análise inicial de resíduos seguros do sistema sem exigir uma pasta manual;
+- temporários do usuário/Windows, miniaturas, shader cache, dumps e relatórios de erro;
+- Lixeira e Delivery Optimization classificados como `REVIEW`;
 - varredura iterativa, sem descer em `node_modules`;
 - identificação de projetos pela presença de `package.json`;
 - tamanho, caminho e última modificação de cada resultado;
@@ -15,41 +24,34 @@ O NodeSweep encontra projetos abaixo de uma pasta escolhida, mede seus diretóri
 - seleção individual ou em lote;
 - confirmação explícita antes da limpeza;
 - cálculo do espaço efetivamente recuperado;
-- último caminho salvo localmente no navegador.
+- último caminho salvo localmente no WebView do aplicativo.
+- caches globais e locais do Gradle separados por categoria;
+- detecção de projetos Groovy DSL, Kotlin DSL e Wrapper;
+- distribuições relacionadas aos projetos conhecidos;
+- JDKs provisionados exibidos como protegidos;
+- estratégias Conservative, Balanced e Deep Clean;
+- limpeza Gradle exclusivamente por IDs emitidos pelo scanner.
 
 ## Requisitos
 
-- Windows, macOS ou Linux;
-- Node.js 18 ou superior;
-- npm 9 ou superior;
-- Git, apenas para contribuir.
+- Windows 10 ou 11 com WebView2, para executar o instalador;
+- para desenvolver: Node.js 18+, npm, Rust estável e Microsoft C++ Build Tools.
 
 ## Instalação
 
-```powershell
-git clone https://github.com/srpedrax/nodesweep.git
-cd nodesweep
-npm.cmd install
-npm.cmd --prefix client install
-npm.cmd run build
-npm.cmd start
-```
+Baixe o instalador `.exe` da release mais recente, execute-o e abra o NodeSweep pelo menu Iniciar. Nenhum runtime separado é necessário.
 
-Abra `http://localhost:3000`, cole o caminho da pasta onde ficam seus projetos e escolha **Escanear**. No macOS e Linux, use `npm` no lugar de `npm.cmd`.
+Ao abrir, o aplicativo descobre o armazenamento e analisa as categorias do sistema reconhecidas. Para Node.js e Gradle, use **Adicionar local de desenvolvimento** como opção avançada.
 
 ## Desenvolvimento
 
-Execute em terminais separados:
-
 ```powershell
-# API em http://localhost:3000
-npm.cmd start
-
-# Vite em http://localhost:5173
+npm.cmd install
+npm.cmd --prefix client install
 npm.cmd run dev
 ```
 
-O servidor do Vite encaminha `/api` para a porta 3000. Para validar o projeto:
+O Tauri inicia o Vite e abre a janela desktop. Para validar e criar o instalador:
 
 ```powershell
 npm.cmd test
@@ -58,9 +60,19 @@ npm.cmd audit --omit=dev
 npm.cmd --prefix client audit --omit=dev
 ```
 
+### Identidade visual
+
+O arquivo canônico é `assets/branding/nodesweep-icon.png`. Depois de alterá-lo, regenere os ícones do Tauri, instalador e frontend com:
+
+```powershell
+npm.cmd run branding
+```
+
+Não edite manualmente os derivados em `src-tauri/icons` ou `client/public`.
+
 ## Segurança
 
-O NodeSweep v0.1 remove exclusivamente diretórios chamados `node_modules` quando todas as condições abaixo são satisfeitas:
+O NodeSweep remove exclusivamente categorias reconstruíveis reconhecidas quando todas as condições abaixo são satisfeitas:
 
 - o diretório existe e é real;
 - o pai contém um arquivo `package.json` regular;
@@ -69,56 +81,41 @@ O NodeSweep v0.1 remove exclusivamente diretórios chamados `node_modules` quand
 - todo o lote foi validado;
 - o usuário enviou confirmação explícita;
 - o alvo permaneceu igual na revalidação imediatamente anterior à exclusão.
+- itens Gradle são resolvidos por IDs de um snapshot nativo, nunca por caminhos enviados pela interface.
+- itens do sistema são resolvidos por IDs de snapshot e a identidade do volume é revalidada antes da limpeza;
+- arquivos ocupados são ignorados e incluídos no relatório, sem interromper todo o lote;
+- o cache de miniaturas só permite arquivos regulares `thumbcache_*`, sem percorrer o restante do diretório do Explorer.
 
-O código-fonte, `.env`, uploads, bancos, arquivos públicos, manifests e lockfiles nunca são alvos válidos. Ainda assim, execute o servidor apenas localmente, mantenha backups e revise a seleção antes de confirmar. Consulte a [política de segurança](SECURITY.md) para reportar vulnerabilidades.
+O código-fonte, `.env`, uploads, bancos, arquivos públicos, manifests e lockfiles nunca são alvos válidos. Ainda assim, mantenha backups e revise a seleção antes de confirmar. Consulte a [política de segurança](SECURITY.md) para reportar vulnerabilidades.
 
-## API
+## Arquitetura
 
-### Escanear projetos
-
-```http
-POST /api/scan
-Content-Type: application/json
-```
-
-```json
-{ "rootPath": "C:\\Users\\User\\Documents\\Projetos" }
-```
-
-### Limpar projetos selecionados
-
-```http
-DELETE /api/cleanup
-Content-Type: application/json
-```
-
-```json
-{
-  "paths": ["C:\\Users\\User\\Documents\\Projetos\\app\\node_modules"],
-  "confirmed": true
-}
-```
+O React chama os scanners e cleaners por IPC usando IDs opacos de snapshots. Os comandos executam o trabalho de filesystem em threads bloqueantes gerenciadas pelo runtime Tauri. Não há Express, porta HTTP ou acesso genérico do frontend ao filesystem.
+Os módulos Gradle e Sistema usam comandos separados e mantêm os registros de alvos apenas em memória. A descoberta de unidades usa APIs Win32 nativas, sem PowerShell ou WMI.
 
 ## Estrutura
 
 ```text
 client/                 React + Vite + CSS
-server/
-├── controllers/        adaptação HTTP
-├── routes/             endpoints Express
-├── services/           scan, tamanho e limpeza
-└── utils/              segurança de caminhos e erros
-test/                    testes de serviço e integração HTTP
+src-tauri/
+├── capabilities/       permissões mínimas do aplicativo
+├── icons/              ícones desktop e instalador
+└── src/                scanner e limpeza nativos em Rust
 ```
 
 ## Roadmap
 
 - [x] scanner e limpeza segura de `node_modules`;
 - [x] dashboard React responsivo;
-- [x] confirmação e seleção em lote;
-- [ ] seletor nativo de pastas com aplicação desktop;
+- [x] aplicativo Tauri com seletor nativo;
+- [x] gerenciamento Gradle global e por projeto;
+- [x] presets, risk labels e limpeza por snapshot;
+- [x] descoberta automática de unidades e visão de capacidade;
+- [x] categorias iniciais de limpeza do sistema com risco e consequência;
 - [ ] cancelamento e progresso da varredura;
-- [ ] caches e artefatos adicionais por política explícita;
+- [ ] varredura rápida/profunda multiunidade com exclusões persistentes;
+- [ ] npm/npx, `.next`, `.vite`, `dist`, `coverage` e outros artefatos reconhecidos;
+- [ ] detecção SSD/HDD por barramento e rotação;
 - [ ] pacotes instaláveis e atualizações automáticas.
 
 O escopo atual não inclui cache do npm, `.next`, `dist`, `build` ou outros diretórios.

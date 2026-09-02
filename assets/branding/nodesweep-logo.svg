@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-labelledby="title">
+  <title id="title">NodeSweep</title>
+  <image href="nodesweep-icon.svg" x="10" y="10" width="160" height="160"/>
+  <text x="195" y="112" fill="#edf7f1" font-family="Inter,Segoe UI,sans-serif" font-size="72" font-weight="800" letter-spacing="-4">Node<tspan fill="#74e5a5">Sweep</tspan></text>
+</svg>

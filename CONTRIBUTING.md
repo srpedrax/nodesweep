@@ -4,7 +4,7 @@ Obrigado por querer melhorar o NodeSweep. Como o projeto remove diretórios, mud
 
 ## Ambiente de desenvolvimento
 
-Requisitos: Node.js 18 ou superior, npm e Git.
+Requisitos: Node.js 18 ou superior, npm, Git, Rust estável e os pré-requisitos Tauri do seu sistema operacional.
 
 ```powershell
 npm.cmd install
@@ -13,7 +13,7 @@ npm.cmd test
 npm.cmd run build
 ```
 
-Para desenvolver, execute o backend com `npm.cmd start` e o frontend com `npm.cmd run dev` em terminais separados.
+Para desenvolver, use `npm.cmd run dev`; o Tauri inicia o Vite e abre a janela desktop.
 
 ## Pull requests
 
@@ -23,11 +23,11 @@ Para desenvolver, execute o backend com `npm.cmd start` e o frontend com `npm.cm
 4. Execute os testes e o build antes de enviar.
 5. Explique riscos de filesystem e as medidas de segurança adotadas.
 
-Não amplie os alvos removíveis sem discussão prévia. No v0.1, somente diretórios `node_modules` validados podem ser apagados.
+Não amplie os alvos removíveis sem discussão prévia. Nesta etapa do 2.0, somente diretórios `node_modules` validados podem ser apagados.
 
 ## Estilo
 
-- CommonJS no servidor e módulos ES no cliente.
+- Rust na camada nativa e módulos ES no cliente.
 - Sem dependências novas quando a plataforma já oferece a funcionalidade necessária.
 - Mensagens de erro úteis sem expor detalhes internos do servidor.
 - Commits claros e no imperativo, preferencialmente seguindo Conventional Commits.
