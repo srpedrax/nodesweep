@@ -1,0 +1,21 @@
+[package]
+name = "nodesweep"
+version = "2.0.0-alpha.1"
+description = "Safely recover space from Node.js projects"
+authors = ["srpedrax"]
+edition = "2021"
+
+[lib]
+name = "nodesweep_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+
+[dev-dependencies]
+tempfile = "3"

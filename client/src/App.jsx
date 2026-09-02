@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 
 const STORAGE_KEY = 'nodesweep:lastRootPath';
 
@@ -20,14 +22,6 @@ function projectAge(dateValue) {
   return { text: `Modificado há ${years} ${years === 1 ? 'ano' : 'anos'}`, badge: 'Antigo', tone: 'old' };
 }
 
-async function apiRequest(url, options) {
-  const response = await fetch(url, options);
-  let body;
-  try { body = await response.json(); } catch { body = {}; }
-  if (!response.ok) throw new Error(body.error || 'Não foi possível concluir a operação.');
-  return body;
-}
-
 function App() {
   const [rootPath, setRootPath] = useState(() => localStorage.getItem(STORAGE_KEY) || '');
   const [projects, setProjects] = useState([]);
@@ -43,15 +37,21 @@ function App() {
   const selectedBytes = selectedProjects.reduce((sum, item) => sum + item.sizeBytes, 0);
   const allSelected = projects.length > 0 && selected.size === projects.length;
 
+  async function chooseFolder() {
+    setError('');
+    try {
+      const selectedPath = await open({ directory: true, multiple: false, title: 'Escolha a pasta dos seus projetos' });
+      if (selectedPath) setRootPath(selectedPath);
+    } catch (dialogError) { setError(String(dialogError)); }
+  }
+
   async function scan(event) {
     event.preventDefault();
     const value = rootPath.trim();
     if (!value) return setError('Informe a pasta onde ficam seus projetos.');
     setStatus('scanning'); setError(''); setFreedBytes(null); setHasScanned(true);
     try {
-      const data = await apiRequest('/api/scan', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rootPath: value })
-      });
+      const data = await invoke('scan_projects', { rootPath: value });
       localStorage.setItem(STORAGE_KEY, value);
       setProjects(data.projects); setSelected(new Set());
     } catch (requestError) {
@@ -74,10 +74,7 @@ function App() {
   async function cleanup() {
     setStatus('cleaning'); setError('');
     try {
-      const data = await apiRequest('/api/cleanup', {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paths: selectedProjects.map((item) => item.nodeModulesPath), confirmed: true })
-      });
+      const data = await invoke('cleanup_projects', { paths: selectedProjects.map((item) => item.nodeModulesPath), confirmed: true });
       setProjects((current) => current.filter((item) => !selected.has(item.nodeModulesPath)));
       setSelected(new Set()); setFreedBytes(data.totalFreedBytes); setConfirmOpen(false);
     } catch (requestError) {
@@ -89,7 +86,7 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="NodeSweep início"><span className="brand-mark">N</span>Node<span>Sweep</span></a>
-        <span className="version">v0.1</span>
+        <span className="version">v2 alpha</span>
       </header>
 
       <main id="top">
@@ -101,7 +98,7 @@ function App() {
           <form className="scan-panel" onSubmit={scan}>
             <label htmlFor="rootPath">Pasta para escanear</label>
             <div className="input-row">
-              <div className="path-input"><span aria-hidden="true">⌘</span><input id="rootPath" value={rootPath} onChange={(e) => setRootPath(e.target.value)} placeholder="C:\\Users\\...\\Projetos" disabled={status !== 'idle'} /></div>
+              <div className="path-input"><span aria-hidden="true">⌘</span><input id="rootPath" value={rootPath} onChange={(e) => setRootPath(e.target.value)} placeholder="C:\\Users\\...\\Projetos" disabled={status !== 'idle'} /><button type="button" className="browse" onClick={chooseFolder} disabled={status !== 'idle'}>Escolher pasta</button></div>
               <button className="primary" disabled={status !== 'idle'}>{status === 'scanning' ? <><i className="spinner" /> Escaneando</> : <>Escanear <span>→</span></>}</button>
             </div>
             <p className="hint">Cole o caminho da pasta onde ficam seus projetos Node.js.</p>
