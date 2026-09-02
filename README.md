@@ -12,6 +12,11 @@ O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Nod
 
 ## Funcionalidades
 
+- descoberta automática das unidades pelo Windows, com identidade de volume e capacidade;
+- unidade do sistema selecionada automaticamente; removíveis e rede ficam fora da seleção automática;
+- análise inicial de resíduos seguros do sistema sem exigir uma pasta manual;
+- temporários do usuário/Windows, miniaturas, shader cache, dumps e relatórios de erro;
+- Lixeira e Delivery Optimization classificados como `REVIEW`;
 - varredura iterativa, sem descer em `node_modules`;
 - identificação de projetos pela presença de `package.json`;
 - tamanho, caminho e última modificação de cada resultado;
@@ -36,7 +41,7 @@ O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Nod
 
 Baixe o instalador `.exe` da release mais recente, execute-o e abra o NodeSweep pelo menu Iniciar. Nenhum runtime separado é necessário.
 
-Escolha a pasta dos projetos pelo diálogo nativo ou informe o caminho manualmente e selecione **Escanear**.
+Ao abrir, o aplicativo descobre o armazenamento e analisa as categorias do sistema reconhecidas. Para Node.js e Gradle, use **Adicionar local de desenvolvimento** como opção avançada.
 
 ## Desenvolvimento
 
@@ -77,13 +82,16 @@ O NodeSweep remove exclusivamente categorias reconstruíveis reconhecidas quando
 - o usuário enviou confirmação explícita;
 - o alvo permaneceu igual na revalidação imediatamente anterior à exclusão.
 - itens Gradle são resolvidos por IDs de um snapshot nativo, nunca por caminhos enviados pela interface.
+- itens do sistema são resolvidos por IDs de snapshot e a identidade do volume é revalidada antes da limpeza;
+- arquivos ocupados são ignorados e incluídos no relatório, sem interromper todo o lote;
+- o cache de miniaturas só permite arquivos regulares `thumbcache_*`, sem percorrer o restante do diretório do Explorer.
 
 O código-fonte, `.env`, uploads, bancos, arquivos públicos, manifests e lockfiles nunca são alvos válidos. Ainda assim, mantenha backups e revise a seleção antes de confirmar. Consulte a [política de segurança](SECURITY.md) para reportar vulnerabilidades.
 
 ## Arquitetura
 
 O React chama os scanners e cleaners por IPC usando IDs opacos de snapshots. Os comandos executam o trabalho de filesystem em threads bloqueantes gerenciadas pelo runtime Tauri. Não há Express, porta HTTP ou acesso genérico do frontend ao filesystem.
-O módulo Gradle usa comandos separados (`scan_gradle` e `cleanup_gradle`) e mantém seu registro de alvos apenas em memória.
+Os módulos Gradle e Sistema usam comandos separados e mantêm os registros de alvos apenas em memória. A descoberta de unidades usa APIs Win32 nativas, sem PowerShell ou WMI.
 
 ## Estrutura
 
@@ -102,8 +110,12 @@ src-tauri/
 - [x] aplicativo Tauri com seletor nativo;
 - [x] gerenciamento Gradle global e por projeto;
 - [x] presets, risk labels e limpeza por snapshot;
+- [x] descoberta automática de unidades e visão de capacidade;
+- [x] categorias iniciais de limpeza do sistema com risco e consequência;
 - [ ] cancelamento e progresso da varredura;
-- [ ] caches e artefatos adicionais por política explícita;
+- [ ] varredura rápida/profunda multiunidade com exclusões persistentes;
+- [ ] npm/npx, `.next`, `.vite`, `dist`, `coverage` e outros artefatos reconhecidos;
+- [ ] detecção SSD/HDD por barramento e rotação;
 - [ ] pacotes instaláveis e atualizações automáticas.
 
 O escopo atual não inclui cache do npm, `.next`, `dist`, `build` ou outros diretórios.
