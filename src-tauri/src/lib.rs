@@ -1,5 +1,6 @@
 mod cleanup;
 mod gradle;
+mod platform;
 mod scan;
 mod storage;
 mod system_cleanup;
@@ -11,6 +12,18 @@ use tauri::State;
 
 #[derive(Default)]
 struct NodeState(Mutex<HashMap<String, PathBuf>>);
+
+#[tauri::command]
+fn administrator_status() -> bool {
+    platform::is_elevated()
+}
+
+#[tauri::command]
+fn restart_as_administrator(app: tauri::AppHandle) -> Result<(), String> {
+    platform::restart_elevated()?;
+    app.exit(0);
+    Ok(())
+}
 
 #[tauri::command]
 async fn discover_storage() -> Result<Vec<storage::DriveInfo>, String> {
@@ -147,7 +160,9 @@ pub fn run() {
             cleanup_gradle,
             discover_storage,
             scan_system,
-            cleanup_system
+            cleanup_system,
+            administrator_status,
+            restart_as_administrator
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NodeSweep");

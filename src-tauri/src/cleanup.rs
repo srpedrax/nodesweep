@@ -17,6 +17,29 @@ pub struct DeletedItem {
 pub struct CleanupResult {
     pub deleted: Vec<DeletedItem>,
     pub total_freed_bytes: u64,
+    pub skipped_bytes: u64,
+    pub failures: Vec<CleanupFailure>,
+}
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupFailure {
+    pub path: String,
+    pub kind: CleanupFailureKind,
+    pub message: String,
+    pub skipped_bytes: u64,
+    pub can_retry: bool,
+    pub can_elevate: bool,
+}
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub enum CleanupFailureKind {
+    PermissionDenied,
+    RequiresElevation,
+    FileInUse,
+    TargetChanged,
+    DriveUnavailable,
+    Protected,
+    NotFound,
+    IoError,
 }
 #[derive(Debug)]
 struct SafeTarget {
@@ -124,31 +147,100 @@ pub fn cleanup(paths: &[String], confirmed: bool) -> Result<CleanupResult, Strin
         return Err("A seleção contém caminhos duplicados.".into());
     }
     let mut deleted = Vec::new();
+    let mut failures = Vec::new();
     for target in targets {
         let size_before = directory_size(&target.resolved)?;
-        let revalidated = validate(&target.resolved.to_string_lossy())?;
+        let revalidated = match validate(&target.resolved.to_string_lossy()) {
+            Ok(value) => value,
+            Err(message) => {
+                failures.push(CleanupFailure {
+                    path: target.resolved.to_string_lossy().into_owned(),
+                    kind: validation_failure_kind(&target.resolved, &message),
+                    message,
+                    skipped_bytes: size_before,
+                    can_retry: true,
+                    can_elevate: false,
+                });
+                continue;
+            }
+        };
         if revalidated.canonical != target.canonical {
-            return Err(format!(
-                "O alvo mudou durante a operação: {}",
-                target.resolved.display()
-            ));
+            failures.push(CleanupFailure {
+                path: target.resolved.to_string_lossy().into_owned(),
+                kind: CleanupFailureKind::TargetChanged,
+                message: "O alvo mudou depois da varredura e foi preservado.".into(),
+                skipped_bytes: size_before,
+                can_retry: true,
+                can_elevate: false,
+            });
+            continue;
         }
-        fs::remove_dir_all(&target.resolved).map_err(|error| {
-            format!(
-                "Não foi possível remover {}: {error}",
-                target.resolved.display()
-            )
-        })?;
-        deleted.push(DeletedItem {
-            path: target.resolved.to_string_lossy().into_owned(),
-            freed_bytes: size_before,
-        });
+        match fs::remove_dir_all(&target.resolved) {
+            Ok(()) => deleted.push(DeletedItem {
+                path: target.resolved.to_string_lossy().into_owned(),
+                freed_bytes: size_before,
+            }),
+            Err(error) => failures.push(classify_failure(&target.resolved, size_before, error)),
+        }
     }
     let total_freed_bytes = deleted.iter().map(|item| item.freed_bytes).sum();
+    let skipped_bytes = failures.iter().map(|item| item.skipped_bytes).sum();
     Ok(CleanupResult {
         deleted,
         total_freed_bytes,
+        skipped_bytes,
+        failures,
     })
+}
+
+fn validation_failure_kind(path: &Path, message: &str) -> CleanupFailureKind {
+    if message.to_lowercase().contains("protegido") {
+        CleanupFailureKind::Protected
+    } else if path.components().next().is_some() && !path.exists() {
+        #[cfg(windows)]
+        if path.ancestors().last().is_some_and(|root| !root.exists()) {
+            return CleanupFailureKind::DriveUnavailable;
+        }
+        CleanupFailureKind::NotFound
+    } else {
+        CleanupFailureKind::TargetChanged
+    }
+}
+
+fn classify_failure(path: &Path, size: u64, error: std::io::Error) -> CleanupFailure {
+    let raw = error.raw_os_error();
+    let elevated = crate::platform::is_elevated();
+    let (kind, message, can_elevate) = if matches!(raw, Some(32 | 33)) {
+        (CleanupFailureKind::FileInUse, "O VS Code ou outro processo pode estar usando arquivos desta pasta. Feche o aplicativo e tente novamente.", false)
+    } else if error.kind() == std::io::ErrorKind::PermissionDenied && !elevated {
+        (
+            CleanupFailureKind::RequiresElevation,
+            "O Windows negou o acesso. Você pode tentar novamente como administrador.",
+            true,
+        )
+    } else if error.kind() == std::io::ErrorKind::PermissionDenied {
+        (CleanupFailureKind::PermissionDenied, "O acesso continuou negado em modo administrador; uma ACL, antivírus ou processo ativo pode estar bloqueando o alvo.", false)
+    } else if error.kind() == std::io::ErrorKind::NotFound {
+        (
+            CleanupFailureKind::NotFound,
+            "O alvo não existe mais.",
+            false,
+        )
+    } else {
+        (
+            CleanupFailureKind::IoError,
+            "O Windows retornou um erro de entrada/saída durante a limpeza.",
+            false,
+        )
+    };
+    CleanupFailure {
+        path: path.to_string_lossy().into_owned(),
+        kind,
+        message: format!("{message} ({error})"),
+        skipped_bytes: size,
+        can_retry: true,
+        can_elevate,
+    }
 }
 
 #[cfg(test)]
@@ -197,5 +289,28 @@ mod tests {
         assert!(cleanup(&[value.clone(), value], true).is_err());
         assert!(validate(m.parent().unwrap().to_str().unwrap()).is_err());
         assert!(m.exists());
+    }
+    #[test]
+    fn classifies_windows_sharing_violation_as_file_in_use() {
+        let failure = classify_failure(
+            Path::new("C:\\project\\node_modules"),
+            42,
+            std::io::Error::from_raw_os_error(32),
+        );
+        assert_eq!(failure.kind, CleanupFailureKind::FileInUse);
+        assert!(!failure.can_elevate);
+        assert_eq!(failure.skipped_bytes, 42);
+    }
+    #[test]
+    fn elevated_permission_denial_never_requests_elevation_again() {
+        if crate::platform::is_elevated() {
+            let failure = classify_failure(
+                Path::new("C:\\project\\node_modules"),
+                1,
+                std::io::Error::from_raw_os_error(5),
+            );
+            assert_eq!(failure.kind, CleanupFailureKind::PermissionDenied);
+            assert!(!failure.can_elevate);
+        }
     }
 }

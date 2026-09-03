@@ -104,7 +104,7 @@ pub fn discover() -> Result<Vec<DriveInfo>, String> {
             free_bytes: free,
             is_system,
             is_removable,
-            auto_selected: is_system,
+            auto_selected: kind == DRIVE_FIXED,
         });
     }
     Ok(result)
@@ -133,5 +133,9 @@ mod tests {
             .iter()
             .filter(|drive| drive.is_removable)
             .all(|drive| !drive.auto_selected));
+        assert!(drives
+            .iter()
+            .filter(|drive| drive.drive_type == "Fixed")
+            .all(|drive| drive.auto_selected));
     }
 }
