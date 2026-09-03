@@ -7,7 +7,7 @@
 > Recupere espaço de projetos Node.js esquecidos sem colocar seu código-fonte em risco.
 
 <p align="center">
-  <a href="https://github.com/srpedrax/nodesweep/releases/download/v2.1.0-alpha.1/NodeSweep_2.1.0-alpha.1_x64-setup.exe">
+  <a href="https://github.com/srpedrax/nodesweep/releases/download/v2.1.0-alpha.2/NodeSweep_2.1.0-alpha.2_x64-setup.exe">
     <img alt="Baixar NodeSweep para Windows" src="https://img.shields.io/badge/Baixar_para_Windows-v2.1_alpha-70dfa0?style=for-the-badge&logo=windows11&logoColor=07100c">
   </a>
 </p>
@@ -23,7 +23,10 @@ O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Nod
 ## Funcionalidades
 
 - descoberta automática das unidades pelo Windows, com identidade de volume e capacidade;
-- unidade do sistema selecionada automaticamente; removíveis e rede ficam fora da seleção automática;
+- unidades fixas selecionadas automaticamente; removíveis e rede ficam fora da seleção automática;
+- navegação separada entre Overview, System Cleanup, Developer Cleanup, Storage e Settings;
+- diagnóstico de arquivo em uso, acesso negado e possível necessidade de elevação;
+- relançamento administrativo opcional pelo UAC, sem executar permanentemente como administrador;
 - análise inicial de resíduos seguros do sistema sem exigir uma pasta manual;
 - temporários do usuário/Windows, miniaturas, shader cache, dumps e relatórios de erro;
 - Lixeira e Delivery Optimization classificados como `REVIEW`;
@@ -49,7 +52,7 @@ O NodeSweep é um aplicativo desktop que entende o armazenamento de projetos Nod
 
 ## Instalação
 
-Baixe diretamente o [instalador do NodeSweep v2.1 alpha para Windows](https://github.com/srpedrax/nodesweep/releases/download/v2.1.0-alpha.1/NodeSweep_2.1.0-alpha.1_x64-setup.exe), execute-o e abra o aplicativo pelo menu Iniciar. Nenhum runtime separado é necessário.
+Baixe diretamente o [instalador do NodeSweep v2.1 alpha para Windows](https://github.com/srpedrax/nodesweep/releases/download/v2.1.0-alpha.2/NodeSweep_2.1.0-alpha.2_x64-setup.exe), execute-o e abra o aplicativo pelo menu Iniciar. Nenhum runtime separado é necessário.
 
 Esta é uma versão de pré-lançamento. As demais versões e respectivas notas ficam disponíveis na [página de releases](https://github.com/srpedrax/nodesweep/releases).
 

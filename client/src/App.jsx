@@ -36,16 +36,23 @@ function App() {
   const [drives, setDrives] = useState([]);
   const [systemScan, setSystemScan] = useState({ items: [], totalSizeBytes: 0, recommendedSizeBytes: 0 });
   const [startupStatus, setStartupStatus] = useState('loading');
+  const [view, setView] = useState('overview');
+  const [isElevated, setIsElevated] = useState(false);
+  const [cleanupFailures, setCleanupFailures] = useState([]);
 
   useEffect(() => {
     let active = true;
-    Promise.all([invoke('discover_storage'), invoke('scan_system')])
-      .then(([storage, system]) => {
-        if (!active) return;
-        setDrives(storage); setSystemScan(system); setEcosystem('system'); setHasScanned(true);
-      })
+    invoke('administrator_status').then((value) => active && setIsElevated(value));
+    invoke('discover_storage').then((storage) => active && setDrives(storage));
+    invoke('scan_system')
+      .then((system) => { if (active) { setSystemScan(system); setHasScanned(true); } })
       .catch((startupError) => active && setError(startupError?.message || String(startupError)))
       .finally(() => active && setStartupStatus('idle'));
+    const savedRoot = localStorage.getItem(STORAGE_KEY);
+    if (savedRoot) {
+      invoke('scan_projects', { rootPath: savedRoot }).then((data) => active && setProjects(data.projects)).catch(() => {});
+      invoke('scan_gradle', { rootPath: savedRoot }).then((data) => active && setGradleScan(data)).catch(() => {});
+    }
     return () => { active = false; };
   }, []);
 
@@ -102,34 +109,53 @@ function App() {
   }
 
   async function cleanup() {
-    setStatus('cleaning'); setError('');
+    setStatus('cleaning'); setError(''); setCleanupFailures([]);
     try {
       const data = ecosystem === 'node'
         ? await invoke('cleanup_projects', { ids: selectedProjects.map((item) => item.id), confirmed: true })
         : ecosystem === 'gradle'
           ? await invoke('cleanup_gradle', { ids: selectedGradle.map((item) => item.id), confirmed: true })
           : await invoke('cleanup_system', { ids: selectedSystem.map((item) => item.id), confirmed: true });
-      if (ecosystem === 'node') setProjects((current) => current.filter((item) => !selected.has(item.id)));
-      else if (ecosystem === 'gradle') setGradleScan((current) => ({ ...current, items: current.items.filter((item) => !selected.has(item.id)), recoverableSizeBytes: Math.max(0, current.recoverableSizeBytes - data.totalFreedBytes) }));
-      else setSystemScan((current) => ({ ...current, items: current.items.filter((item) => !selected.has(item.id)), totalSizeBytes: Math.max(0, current.totalSizeBytes - data.requestedBytes), recommendedSizeBytes: Math.max(0, current.recommendedSizeBytes - data.requestedBytes) }));
-      setSelected(new Set()); setFreedBytes(data.totalFreedBytes ?? data.freedBytes); setConfirmOpen(false);
+      if (ecosystem === 'node') {
+        const deletedPaths = new Set(data.deleted.map((item) => item.path.toLowerCase()));
+        const failedPaths = new Set((data.failures || []).map((item) => item.path.toLowerCase()));
+        setProjects((current) => current.filter((item) => !deletedPaths.has(item.nodeModulesPath.toLowerCase())));
+        setSelected(new Set(projects.filter((item) => failedPaths.has(item.nodeModulesPath.toLowerCase())).map((item) => item.id)));
+        setCleanupFailures(data.failures || []);
+      }
+      else if (ecosystem === 'gradle') { setGradleScan((current) => ({ ...current, items: current.items.filter((item) => !selected.has(item.id)), recoverableSizeBytes: Math.max(0, current.recoverableSizeBytes - data.totalFreedBytes) })); setSelected(new Set()); }
+      else { setSystemScan((current) => ({ ...current, items: current.items.filter((item) => !selected.has(item.id)), totalSizeBytes: Math.max(0, current.totalSizeBytes - data.requestedBytes), recommendedSizeBytes: Math.max(0, current.recommendedSizeBytes - data.requestedBytes) })); setSelected(new Set()); }
+      setFreedBytes(data.totalFreedBytes ?? data.freedBytes); setConfirmOpen(false);
     } catch (requestError) {
       setError(requestError.message); setConfirmOpen(false);
     } finally { setStatus('idle'); }
+  }
+
+  async function restartElevated() {
+    try { await invoke('restart_as_administrator'); }
+    catch (restartError) { setError(restartError?.message || String(restartError)); }
   }
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="NodeSweep início"><img className="app-logo" src="/nodesweep-icon.png" alt="" />Node<span>Sweep</span></a>
-        <span className="version">v2.1 alpha</span>
+        <nav className="main-nav" aria-label="Navegação principal">
+          {[['overview', 'Overview'], ['system', 'System Cleanup'], ['developer', 'Developer Cleanup'], ['storage', 'Storage'], ['settings', 'Settings']].map(([key, label]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => { setView(key); setSelected(new Set()); if (key === 'system') setEcosystem('system'); else if (key === 'developer' && ecosystem === 'system') setEcosystem('node'); }}>{label}</button>)}
+        </nav>
+        {isElevated && <span className="admin-mode">Administrator mode</span>}
+        <span className="version">v2.1 alpha.2</span>
       </header>
 
       <main id="top">
+        {view === 'overview' && <section className="overview-panel"><p className="eyebrow"><span /> Quick Scan</p><h1>{formatBytes(systemScan.totalSizeBytes + projects.reduce((sum, item) => sum + item.sizeBytes, 0) + gradleScan.recoverableSizeBytes)}<br /><em>recuperáveis</em></h1><div className="summary-grid"><button onClick={() => { setView('system'); setEcosystem('system'); }}><span>System Cleanup</span><strong>{formatBytes(systemScan.totalSizeBytes)}</strong></button><button onClick={() => { setView('developer'); setEcosystem('node'); }}><span>Developer Cleanup</span><strong>{formatBytes(projects.reduce((sum, item) => sum + item.sizeBytes, 0) + gradleScan.recoverableSizeBytes)}</strong></button></div></section>}
+        {(view === 'overview' || view === 'storage') &&
         <section className="storage-overview" aria-busy={startupStatus === 'loading'}>
           <div className="results-head"><div><p className="section-label">Armazenamento detectado</p><h2>{startupStatus === 'loading' ? 'Analisando este computador…' : `${drives.length} ${drives.length === 1 ? 'unidade encontrada' : 'unidades encontradas'}`}</h2></div><div className="recoverable"><strong>{formatBytes(systemScan.recommendedSizeBytes)}</strong><span>limpeza recomendada</span></div></div>
           <div className="drive-grid">{drives.map((drive) => { const used = Math.max(0, drive.totalBytes - drive.freeBytes); const percentage = drive.totalBytes ? Math.round(used / drive.totalBytes * 100) : 0; return <article className={`drive-card ${drive.autoSelected ? 'selected' : ''}`} key={drive.id}><div><strong>{drive.label || `Disco local (${drive.mountPoint.slice(0, 2)})`}</strong><span>{drive.isSystem ? 'Sistema' : drive.driveType}{drive.isRemovable ? ' · removível' : ''}</span></div><p>{formatBytes(drive.freeBytes)} livres de {formatBytes(drive.totalBytes)}</p><div className="capacity"><i style={{ width: `${percentage}%` }} /></div></article>; })}</div>
-        </section>
+        </section>}
+        {view === 'settings' && <section className="settings-panel"><p className="section-label">Settings</p><h2>Modo de execução</h2><p>O NodeSweep inicia com permissões normais e só solicita elevação quando uma limpeza recusada puder se beneficiar dela.</p><div className="setting-row"><span>Estado atual</span><strong>{isElevated ? 'Administrator mode' : 'Standard mode'}</strong></div>{!isElevated && <button className="secondary" onClick={restartElevated}>Reiniciar como administrador</button>}</section>}
+        {view === 'developer' &&
         <section className="hero">
           <p className="eyebrow"><span /> Espaço limpo. Projetos intactos.</p>
           <h1>Veja o que ocupa espaço.<br /><em>Recupere com segurança.</em></h1>
@@ -143,14 +169,16 @@ function App() {
             </div>
             <p className="hint">Opcional: adicione uma pasta específica para procurar projetos Node.js e Gradle.</p>
           </form>
-        </section>
+        </section>}
 
         {error && <div className="notice error" role="alert"><strong>Não foi possível concluir</strong><span>{error}</span><button onClick={() => setError('')} aria-label="Fechar">×</button></div>}
         {freedBytes !== null && <div className="notice success" role="status"><strong>Limpeza concluída</strong><span>{formatBytes(freedBytes)} recuperados com segurança.</span><button onClick={() => setFreedBytes(null)} aria-label="Fechar">×</button></div>}
 
-        {hasScanned && status !== 'scanning' && (
+        {cleanupFailures.length > 0 && <section className="failure-panel" role="status"><h2>Não foi possível limpar completamente</h2>{cleanupFailures.map((failure) => <article key={failure.path}><div><strong>{failure.kind}</strong><small>{failure.path}</small><p>{failure.message}</p><span>{formatBytes(failure.skippedBytes)} não recuperados</span></div><div className="failure-actions"><button onClick={() => setConfirmOpen(true)}>Tentar novamente</button>{failure.canElevate && !isElevated && <button className="danger" onClick={restartElevated}>Reiniciar como administrador</button>}</div></article>)}</section>}
+
+        {hasScanned && status !== 'scanning' && (view === 'system' || view === 'developer') && (
           <section className="results">
-            <div className="ecosystem-tabs"><button className={ecosystem === 'system' ? 'active' : ''} onClick={() => { setEcosystem('system'); setSelected(new Set()); }}>Sistema <span>{formatBytes(systemScan.totalSizeBytes)}</span></button><button className={ecosystem === 'node' ? 'active' : ''} onClick={() => { setEcosystem('node'); setSelected(new Set()); }}>Node.js <span>{formatBytes(projects.reduce((s,p)=>s+p.sizeBytes,0))}</span></button><button className={ecosystem === 'gradle' ? 'active' : ''} onClick={() => { setEcosystem('gradle'); setSelected(new Set()); }}>Gradle <span>{formatBytes(gradleScan.recoverableSizeBytes)}</span></button></div>
+            {view === 'developer' && <div className="ecosystem-tabs"><button className={ecosystem === 'node' ? 'active' : ''} onClick={() => { setEcosystem('node'); setSelected(new Set()); }}>Node.js <span>{formatBytes(projects.reduce((s,p)=>s+p.sizeBytes,0))}</span></button><button className={ecosystem === 'gradle' ? 'active' : ''} onClick={() => { setEcosystem('gradle'); setSelected(new Set()); }}>Gradle <span>{formatBytes(gradleScan.recoverableSizeBytes)}</span></button></div>}
             <div className="results-head">
               <div><p className="section-label">{ecosystem === 'node' ? 'Projetos Node.js' : ecosystem === 'gradle' ? 'Gradle storage management' : 'Limpeza do sistema'}</p><h2>{visibleItems.length} {visibleItems.length === 1 ? 'item encontrado' : 'itens encontrados'}</h2></div>
               <div className="recoverable"><strong>{formatBytes(totalBytes)}</strong><span>recuperáveis</span></div>

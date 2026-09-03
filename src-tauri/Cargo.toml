@@ -1,6 +1,6 @@
 [package]
 name = "nodesweep"
-version = "2.1.0-alpha.1"
+version = "2.1.0-alpha.2"
 description = "Safely recover space from Node.js projects"
 authors = ["srpedrax"]
 edition = "2021"
@@ -18,7 +18,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_WindowsProgramming", "Win32_UI_Shell"] }
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_LibraryLoader", "Win32_System_WindowsProgramming", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 tempfile = "3"
